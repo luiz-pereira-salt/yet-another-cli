@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
     "os"
+	"path"
 	"os/exec"
 	"path/filepath"
 	// "encoding/json"
@@ -33,16 +34,17 @@ type CommandArg struct {
 	Description	string		`yaml:"description"`
 }
 
-func (c Command) Execute() {
-	fmt.Printf("Exeucting %s:", c.Name)
+func (c Command) Execute(path string) {
+	fmt.Printf("\n\nExeucting %s:\n", c.Name)
 				
-				// cmd := exec.Command("/bin/sh", execCommand.Command)
-				// cmd.Stdout = os.Stdout
-				// cmd.Stderr = os.Stderr
-				// err := cmd.Run()
-				// if err != nil {
-				// fmt.Printf("error %s", err)
-				// }
+	cmdString := fmt.Sprintf("%s/%s", path, c.Command)
+	cmd := exec.Command("/bin/sh", cmdString)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {	
+		fmt.Printf("error %s", err)
+	}
 }
 
 type item struct {
@@ -50,21 +52,10 @@ type item struct {
 	cmd			Command
 }
 
-
 func (p item) FilterValue() string { return p.title }
 func (p item) Title() string       { return p.title }
 func (p item) Description() string { return p.desc}
 func (p item) Command() Command { return p.cmd}
-
-
-// func (p Plugin) FilterValue() string { return p.Name }
-// func (p Plugin) Title() string       { return p.Name }
-// func (p Plugin) Description() string { return "Desc"}
-
-// func (c Command) FilterValue() string { return c.Name }
-// func (c Command) Title() string       { return c.Name }
-// func (c Command) Description() string { return fmt.Sprintf("%v", c)}
-
 
 type model struct {
 	list 		map[string]list.Model
@@ -72,7 +63,8 @@ type model struct {
 	selected	list.Model
 }
 
-func initialModel(plugins []Plugin) model {
+func initialModel(plugins []Plugin, focused string) model {
+	fmt.Printf("Focused: %v", focused)
 
 	items := make([]list.Item, 0, len(plugins))
 	all := make(map[string]list.Model)
@@ -93,7 +85,7 @@ func initialModel(plugins []Plugin) model {
 	pluginList.Title = "My Plugins"
 	all["plugins"] = pluginList
 	
-	m := model{list: all, focused: "plugins", selected: all["plugins"]}
+	m := model{list: all, focused: focused, selected: all[focused]}
 	
 	return m
 }
@@ -112,15 +104,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if ok {
 				if i.cmd != (Command{}){
-					fmt.Printf("Executing command %s\n", i.cmd.Command)
-					cmdString := fmt.Sprintf("./plugins/%s/%s", m.focused, i.cmd.Command)
-					cmd := exec.Command("/bin/sh", cmdString)
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					err := cmd.Run()
-					if err != nil {
-						fmt.Printf("error %s", err)
-					}
+					i.cmd.Execute(fmt.Sprintf("./plugins/%s", m.focused))
+				
 					return m, tea.Quit	
 				}
 
@@ -183,14 +168,42 @@ func WalkMatch(root, pattern string) ([]Plugin, error) {
     return matches, nil
 }
 
-func main() {
+func init(){
 
-	choices, err := WalkMatch("./plugins", "*.yml")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("Home folder not fould: %v", err)	
+	}
+
+	env := path.Join(home, ".yet-another-cli", "plugin")
+	errDir := os.MkdirAll(env, 0777)
+	if errDir != nil {
+		fmt.Printf("Directory creation wnet wrong %v", err)	
+	}
+
+	os.Setenv("YACPATH", env)
+	fmt.Printf("folderpath: %v\n\n", os.Getenv("YACPATH"))
+	
+}
+
+func main() {
+	var focused string
+	if len(os.Args) > 1 {
+		focused = os.Args[1]
+	}
+
+	var folderPath string = "./plugins"
+	
+	if os.Getenv("YACPATH") != "" {
+		folderPath = os.Getenv("YACPATH")
+	}
+
+	plugins, err := WalkMatch(folderPath, "*.yml")
 	if err != nil {
         fmt.Printf("Alas, there's been an error: %v", err)
     }
 
-	p := tea.NewProgram(initialModel(choices))
+	p := tea.NewProgram(initialModel(plugins, focused))
 	if err := p.Start(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
