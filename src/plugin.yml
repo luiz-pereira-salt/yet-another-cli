@@ -1,0 +1,12 @@
+version: 1.0.0
+name: web
+commands:
+  - name: commmit
+    command: boilerplate
+  - name: test
+    command: test
+    args:
+      - name: --teste
+        description: Teste argument
+
+    

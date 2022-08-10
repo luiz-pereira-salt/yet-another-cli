@@ -1,0 +1,6 @@
+cmd 1:
+  name: boilerplate
+  command: boilerplate.sh
+cmd 2:
+  name: clone
+  command: clone.sh 
