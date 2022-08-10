@@ -3,7 +3,7 @@ name: web
 description: Web commands
 commands:
   - name: commmit
-    command: boilerplate
+    command: commit.sh
   - name: test
     command: test
     args:
