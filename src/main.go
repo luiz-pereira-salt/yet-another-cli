@@ -3,23 +3,28 @@ package main
 import (
 	"fmt"
     "os"
-	"os/exec"
+	// "os/exec"
 	// "encoding/json"
 	"io/ioutil"
 	"gopkg.in/yaml.v3"
 	"log"
-    tea "github.com/charmbracelet/bubbletea"
+    "github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
+var docStyle = lipgloss.NewStyle().Margin(1, 2)
 type Plugin struct { 
-	Version		string 					`yaml:"version"`
-	Name		string					`yaml:"name"`
-	Commands	[]Command	`yaml:"commands"`
+	Version			string 					`yaml:"version"`
+	Name			string					`yaml:"name"`
+	Desc			string					`yaml:"description"`
+	Commands		[]Command				`yaml:"commands"`
 }
 
 type Command struct {
 	Name		string			`yaml:"name"`
 	Command		string			`yaml:"command"`
+	Executer	string			`yaml:"executer"`
 	Args		[]CommandArg	`yaml:"args"`
 }
 
@@ -28,18 +33,41 @@ type CommandArg struct {
 	Description	string		`yaml:"description"`
 }
 
+// func (c Command) Execute() {
+// 	execCommand := m.choices[m.cursor]
+				
+// 				cmd := exec.Command("/bin/sh", execCommand.Command)
+// 				cmd.Stdout = os.Stdout
+// 				cmd.Stderr = os.Stderr
+// 				err := cmd.Run()
+// 				if err != nil {
+// 				fmt.Printf("error %s", err)
+// 				}
+// }
+
+func (p Plugin) FilterValue() string { return p.Name }
+func (p Plugin) Title() string       { return p.Name }
+func (p Plugin) Description() string { return fmt.Sprintf("%s is %v", p.Desc, p.Commands)}
+
+
 type model struct {
-	choices 	[]Command
-	cursor 		int
-	selected	map[int]Command
+	list 		list.Model
 }
 
+func initialModel(choices []Plugin) model {
+	items := make([]list.Item, len(choices))
+	
+	for k, v := range choices {
+		fmt.Printf("Comands %s: %s\n", k, v)
+		items = append(items, v)
+   	}	
 
-func initialModel(choices []Command) model {
-	return model{
-		choices: choices,
-		selected: make(map[int]Command),
-	}
+	m := model{list: list.New(items, list.NewDefaultDelegate(), 0, 0)}
+	m.list.Title = "My Fave Things"
+	
+	fmt.Printf("Items %v\n", m)
+
+	return m
 }
 
 func (m model) Init() tea.Cmd {
@@ -48,71 +76,23 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg: {
-		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyEsc:
+	case tea.KeyMsg:
+		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
-
-		switch msg.String() {
-		case "ctrl+c",  "q":
-			return m, tea.Quit
-		
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		
-		case "j", "down":
-			if m.cursor < len(m.choices)-1 {
-				m.cursor++
-			}
-		
-		case "enter", " ":
-			_, ok := m.selected[m.cursor]
-			if ok {
-				delete(m.selected, m.cursor)
-			} else {
-				m.selected[m.cursor] = m.choices[m.cursor]
-				execCommand := m.choices[m.cursor]
-				
-				cmd := exec.Command("/bin/sh", execCommand.Command)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err := cmd.Run()
-				if err != nil {
-				fmt.Printf("error %s", err)
-				}
-				return m, tea.Quit
-			}
-			
-		}
-	}
+	case tea.WindowSizeMsg:
+		h, v := docStyle.GetFrameSize()
+		m.list.SetSize(msg.Width-h, msg.Height-v)
 	}
 
-	return m, nil
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
 }
 
 
 func (m model) View() string {
-	s := "What should we buy at the market?\n\n"
-
-	for i, choice := range m.choices {
-		cursor := " "
-		if m.cursor == i {
-			cursor = ">"
-		}
-
-		checked := " "
-		if _, ok := m.selected[i]; ok {
-			checked = "x"
-		}
-
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice.Name)
-	}
-
-	s += "\nPress q to quit\n"
-	return s
+	return docStyle.Render(m.list.View())
 }
 
 func main() {
@@ -131,16 +111,18 @@ func main() {
           log.Fatal(err2)
      }
 
-	fmt.Printf("%v", plugin)
+	fmt.Printf("Plugin%v\n", plugin)
+
+	var choices = []Plugin{ plugin }
 
      for k, v := range plugin.Commands {
 
-          fmt.Printf("%s: %s\n", k, v)
+          fmt.Printf("Comands %s: %s\n", k, v)
      }
 
-	// p := tea.NewProgram(initialModel(choices))
-	// if err := p.Start(); err != nil {
-	// 	fmt.Printf("Alas, there's been an error: %v", err)
-	// 	os.Exit(1)
-	// } 
+	p := tea.NewProgram(initialModel(choices))
+	if err := p.Start(); err != nil {
+		fmt.Printf("Alas, there's been an error: %v", err)
+		os.Exit(1)
+	} 
 }
