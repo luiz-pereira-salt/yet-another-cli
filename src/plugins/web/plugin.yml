@@ -2,12 +2,8 @@ version: 1.0.0
 name: web
 description: Web commands
 commands:
-  - name: commmit
-    command: commit.sh
-  - name: test
-    command: test
-    args:
-      - name: --teste
-        description: Teste argument
+  - name: boilerplate
+    command: boilerplate.sh
+
 
     

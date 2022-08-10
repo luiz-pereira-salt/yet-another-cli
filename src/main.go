@@ -4,6 +4,7 @@ import (
 	"fmt"
     "os"
 	"os/exec"
+	"path/filepath"
 	// "encoding/json"
 	"io/ioutil"
 	"gopkg.in/yaml.v3"
@@ -77,7 +78,6 @@ func initialModel(plugins []Plugin) model {
 	all := make(map[string]list.Model)
 	
 	for _, v := range plugins {
-		fmt.Printf("Plugin %v\n", v)
 		commands := make([]list.Item, 0, len(v.Commands))
 
 		for _, y := range v.Commands {
@@ -88,7 +88,6 @@ func initialModel(plugins []Plugin) model {
 
 		items = append(items, item{title: v.Name, desc: v.Desc})
    	}
-	   fmt.Printf("Plugin %v\n", items)
 
 	pluginList := list.New(items, list.NewDefaultDelegate(), 20, 14)
 	pluginList.Title = "My Plugins"
@@ -112,23 +111,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			i, ok := m.selected.SelectedItem().(item)
 
 			if ok {
-				m.focused = i.title
-				m.selected = m.list[m.focused]
-
 				if i.cmd != (Command{}){
 					fmt.Printf("Executing command %s\n", i.cmd.Command)
-					cmdString := fmt.Sprintf("./plugins/web/%s", i.cmd.Command)
+					cmdString := fmt.Sprintf("./plugins/%s/%s", m.focused, i.cmd.Command)
 					cmd := exec.Command("/bin/sh", cmdString)
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					err := cmd.Run()
 					if err != nil {
-					fmt.Printf("error %s", err)
+						fmt.Printf("error %s", err)
 					}
-					// return m, tea.Quit	
+					return m, tea.Quit	
 				}
+
+				m.focused = i.title
+				m.selected = m.list[m.focused]
 			}
-			
 		}
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
@@ -148,25 +146,49 @@ func (m model) View() string {
 	return m.selected.View()
 }
 
+func WalkMatch(root, pattern string) ([]Plugin, error) {
+    var matches []Plugin
+    err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+        if err != nil {
+            return err
+        }
+        if info.IsDir() {
+            return nil
+        }
+        if matched, err := filepath.Match(pattern, filepath.Base(path)); err != nil {
+            return err
+        } else if matched {
+			yfile, err := ioutil.ReadFile(path)
+
+			if err != nil {
+				 log.Fatal(err)
+			}
+	   
+			var plugin Plugin
+	   
+			err2 := yaml.Unmarshal(yfile, &plugin)
+	   
+			if err2 != nil {
+	   
+				 log.Fatal(err2)
+			}
+
+            matches = append(matches, plugin)
+        }
+        return nil
+    })
+    if err != nil {
+        return nil, err
+    }
+    return matches, nil
+}
+
 func main() {
-	yfile, err := ioutil.ReadFile("./plugins/web/plugin.yml")
 
-     if err != nil {
-          log.Fatal(err)
-     }
-
-     var plugin Plugin
-
-     err2 := yaml.Unmarshal(yfile, &plugin)
-
-     if err2 != nil {
-
-          log.Fatal(err2)
-     }
-
-
-	var choices = []Plugin{ plugin }
-
+	choices, err := WalkMatch("./plugins", "*.yml")
+	if err != nil {
+        fmt.Printf("Alas, there's been an error: %v", err)
+    }
 
 	p := tea.NewProgram(initialModel(choices))
 	if err := p.Start(); err != nil {
